@@ -1,0 +1,89 @@
+---
+- name: Patch management simplified 
+  hosts: patchgroup1
+  #strategy: free
+  gather_facts: false
+  vars:
+    mail_body_file: "/tmp/ansible_mail_body"
+
+  vars_files:
+    - email.yml
+
+  pre_tasks:
+
+    - name: Check for yum-utils before proceeding
+      command: rpm -qa | grep yum-utils
+      register: package_check
+
+    - name: Install yum-utils if not found
+      package:
+        name: yum-utils
+        state: latest
+      when: ( 'yum-utils' not in package_check )
+    
+    - name: Check for mail body file
+      file:
+        state: absent
+        path: "{{ mail_body_file }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Create mail body file
+      file:
+        state: touch
+        path: "{{ mail_body_file }}"
+      delegate_to: localhost
+      run_once: true
+
+
+  tasks:
+
+    - name: Update all packages
+      package:
+        name: kernel
+        state: latest
+        update_cache: yes
+     # async: 45
+     # poll: 0
+        
+    - name: Check if reboot is needed
+      command: needs-restarting -r
+      register: reboot_result
+      ignore_errors: true
+
+    - name: reboot machine using a custom reboot command
+      reboot:
+         reboot_timeout: 120
+         #msg: "{{ inventory_hostname }} is shutting down"
+         #boot_time_command: uptime | hostname
+         #test_command: uptime | cut -d ' ' -f 5
+      when: (reboot_result.rc == 1 )
+      register: reboot_status
+
+    - name: Add line to mail body
+      shell: "echo {{ inventory_hostname }} has not been rebooted >> {{ mail_body_file }}"
+      delegate_to: localhost
+      #run_once: true 
+      when: ( 'true' not in reboot_status  )
+
+    - name: Creating body report....
+      command: "cat {{ mail_body_file}}"
+      register: reboot_body
+      delegate_to: localhost
+      run_once: true
+
+  post_tasks:
+ 
+   - name: Send basic email
+     community.general.mail:
+       host: smtp.gmail.com
+       port: 587
+       username: "{{ username }}"
+       password: "{{ password }}"
+       to:
+         - "{{ username }}"
+       subject: Axway Update Report
+       body: "{{ reboot_body.stdout }}"
+     run_once: true
+     delegate_to: localhost
+
