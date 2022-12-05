@@ -40,7 +40,7 @@
 
     - name: Update all packages
       package:
-        name: kernel
+        name: "*"
         state: latest
         update_cache: yes
      # async: 45
