@@ -1,8 +1,8 @@
 ---
 - name: Patch management simplified 
   hosts: patchgroup1
-  #strategy: free
   gather_facts: false
+  
   vars:
     mail_body_file: "/tmp/ansible_mail_body"
 
@@ -40,37 +40,32 @@
 
     - name: Update all packages
       package:
-        name: "*"
+        name: '*'
         state: latest
         update_cache: yes
-     # async: 45
-     # poll: 0
         
     - name: Check if reboot is needed
       command: needs-restarting -r
       register: reboot_result
       ignore_errors: true
 
-    - name: reboot machine using a custom reboot command
+    - name: rebooting server....
       reboot:
          reboot_timeout: 120
-         #msg: "{{ inventory_hostname }} is shutting down"
-         #boot_time_command: uptime | hostname
-         #test_command: uptime | cut -d ' ' -f 5
-      when: (reboot_result.rc == 1 )
+      when: ( reboot_result.rc == 0 )
       register: reboot_status
+      async: 1
+      poll: 0
 
     - name: Add line to mail body
-      shell: "echo {{ inventory_hostname }} has not been rebooted >> {{ mail_body_file }}"
+      shell: "echo {{ inventory_hostname }} : {{ reboot_status }} >> {{ mail_body_file }}"
       delegate_to: localhost
-      #run_once: true 
-      when: ( 'true' not in reboot_status  )
 
     - name: Creating body report....
-      command: "cat {{ mail_body_file}}"
+      command: "cat {{ mail_body_file }}"
       register: reboot_body
-      delegate_to: localhost
       run_once: true
+      delegate_to: localhost
 
   post_tasks:
  
@@ -86,4 +81,3 @@
        body: "{{ reboot_body.stdout }}"
      run_once: true
      delegate_to: localhost
-
