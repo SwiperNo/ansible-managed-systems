@@ -1,0 +1,57 @@
+---
+- name: Patch management simplified 
+  hosts: patchgroup1
+  gather_facts: false
+  max_fail_percentage: 10%
+  serial: 
+    - 30%
+    - 60%
+    - 90%
+    - 100%
+
+  vars:
+    ssh_port: 22
+    regex_search: "OpenSSH"
+
+
+  pre_tasks:
+
+    - name: Check for yum-utils before proceeding
+      command: rpm -qa | grep yum-utils
+      register: package_check
+
+    - name: Install yum-utils if not found
+      package:
+        name: yum-utils
+        state: latest
+      when: ( 'yum-utils' not in package_check )
+
+  tasks:
+
+    - name: Update all packages
+      package:
+        name: '*'
+        state: latest
+        update_cache: yes
+        
+    - name: Check if reboot is needed
+      command: needs-restarting -r
+      register: reboot_result
+      ignore_errors: true
+
+    - name: rebooting server....
+      reboot:
+         reboot_timeout: 120
+      when: ( reboot_result.rc == 0 )
+      register: reboot_status
+      async: 1
+      poll: 0
+   
+    - name: Wait for SSH connection
+      wait_for:
+        port: "{{ ssh_port }}"
+        host: "{{ (ansible_ssh_host|default(ansible_host))| default(inventory_hostname) }}"
+        search_regex: "{{ regex_search }}"
+        delay: 10
+        timeout: 60
+      connection: local
