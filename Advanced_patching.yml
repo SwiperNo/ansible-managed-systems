@@ -1,6 +1,6 @@
 ---
-# This is an Ansible playbook for taking a VMware snapshot of Linux servers, patching Linux servers, and sending an email notification.
-
+# This is an advanced Ansible playbook for Linux Patch management. This playbook takes a VMware snapshot of Linux servers, patching Linux servers, and sending an email notification.
+- name: Linux patch management
 - hosts: all
   become: yes
   vars:
@@ -24,13 +24,13 @@
       when: snapshot_result.failed
 
     - name: Update package manager cache
-      package:
+      apt:
         update_cache: yes
       register: update_cache_result
       when: vm_name not in failed_servers
 
     - name: Install available package updates
-      package:
+      apt:
         upgrade: yes
       register: upgrade_result
       when: vm_name not in failed_servers
@@ -53,7 +53,8 @@
       register: uptime_result
 
     - name: Send email notification with patching results
-      mail:
+      local_action:
+        module: mail
         host: "{{ mail_server }}"
         port: 25
         username: "{{ mail_username }}"
@@ -70,3 +71,4 @@
           {% for server in failed_servers %}
           - {{ server }}
           {% endfor %}
+      when: success_servers|length > 0 or failed_servers|length > 0
