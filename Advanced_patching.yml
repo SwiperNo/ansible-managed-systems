@@ -23,13 +23,13 @@
       when: snapshot_result.failed
 
     - name: Update package manager cache
-      apt:
+      package:
         update_cache: yes
       register: update_cache_result
       when: vm_name not in failed_servers
 
     - name: Install available package updates
-      apt:
+      package:
         upgrade: yes
       register: upgrade_result
       when: vm_name not in failed_servers
