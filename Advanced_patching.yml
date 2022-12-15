@@ -1,5 +1,4 @@
 ---
-# This is an advanced Ansible playbook for Linux Patch management. This playbook takes a VMware snapshot of Linux servers, patching Linux servers, and sending an email notification.
 - name: Linux patch management
 - hosts: all
   become: yes
