@@ -23,3 +23,78 @@
       copy:
         content: "{{ account_password.password }}"
         dest: "{{ password_file_path }}"
+
+
+##################################
+name: Pull account and password from CyberArk
+hosts: localhost
+gather_facts: false
+
+vars:
+account: "{{ lookup('env', 'CYBERARK_ACCOUNT') }}"
+password: "{{ lookup('env', 'CYBERARK_PASSWORD') }}"
+cyberark_url: "https://<CYBERARK_HOSTNAME>/PasswordVault/api/auth/cyberark/CyberArkAuthenticationService"
+
+tasks:
+
+name: Retrieve CyberArk AIM session token
+uri:
+url: "{{ cyberark_url }}"
+method: POST
+user: "{{ account }}"
+password: "{{ password }}"
+force_basic_auth: true
+return_content: yes
+validate_certs: no
+register: aim_session
+
+name: Set CyberArk AIM session token
+set_fact:
+cyberark_aim_session: "{{ aim_session.json['SessionToken'] }}"
+
+name: Retrieve password from CyberArk
+uri:
+url: "https://<CYBERARK_HOSTNAME>/PasswordVault/api/Accounts/<ACCOUNT_NAME>"
+method: GET
+headers:
+Authorization: "Bearer {{ cyberark_aim_session }}"
+Accept: "application/json"
+return_content: yes
+validate_certs: no
+register: cyberark_password
+
+name: Print CyberArk password
+debug:
+var: cyberark_password.json['RetrievalDetails']['Password']
+
+---
+- name: Pull account and password from CyberArk
+  hosts: localhost
+  connection: local
+  gather_facts: no
+
+  vars:
+    cyberark_account: "{{ cyberark_account }}"
+    cyberark_safe: "{{ cyberark_safe }}"
+    cyberark_server: "{{ cyberark_server }}"
+    cyberark_app_id: "{{ cyberark_app_id }}"
+
+  tasks:
+    - name: Get CyberArk password
+      cyberark_password:
+        account: "{{ cyberark_account }}"
+        safe: "{{ cyberark_safe }}"
+        server: "{{ cyberark_server }}"
+        app_id: "{{ cyberark_app_id }}"
+      register: password
+
+    - name: Print password
+      debug:
+        msg: "The password for {{ cyberark_account }} is {{ password.value }}"
+        
+        
+        name: Install CyberArk Ansible module
+get_url:
+url: https://raw.githubusercontent.com/cyberark/ansible-cyberark-secret-manager/master/cyberark_secret_manager.py
+dest: /usr/local/lib/python3.8/site-packages/ansible/modules/
+mode: 0644
