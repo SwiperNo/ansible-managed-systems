@@ -1,0 +1,72 @@
+---
+# This is an Ansible playbook for taking a VMware snapshot of Linux servers, patching Linux servers, and sending an email notification.
+
+- hosts: all
+  become: yes
+  vars:
+    failed_servers: []
+    success_servers: []
+  tasks:
+    - name: Take a VMware snapshot
+      vmware_guest_snapshot:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        datacenter: "{{ datacenter_name }}"
+        name: "{{ vm_name }}"
+        snapshot_name: "{{ snapshot_name }}"
+        state: present
+      register: snapshot_result
+
+    - name: Add server to failed snapshot list if snapshot failed
+      set_fact:
+        failed_servers: "{{ failed_servers + [vm_name] }}"
+      when: snapshot_result.failed
+
+    - name: Update package manager cache
+      package:
+        update_cache: yes
+      register: update_cache_result
+      when: vm_name not in failed_servers
+
+    - name: Install available package updates
+      package:
+        upgrade: yes
+      register: upgrade_result
+      when: vm_name not in failed_servers
+
+    - name: Add server to success list if snapshot and patches were successful
+      set_fact:
+        success_servers: "{{ success_servers + [vm_name] }}"
+      when: snapshot_result.changed and upgrade_result.changed
+
+    - name: Reboot the system if required
+      reboot:
+      when: update_cache_result.changed
+
+    - name: Check if patches were applied successfully
+      command: dpkg -l | grep ^ii
+      register: patch_result
+
+    - name: Get system uptime
+      command: uptime
+      register: uptime_result
+
+    - name: Send email notification with patching results
+      mail:
+        host: "{{ mail_server }}"
+        port: 25
+        username: "{{ mail_username }}"
+        password: "{{ mail_password }}"
+        to: "{{ recipient_email }}"
+        subject: "Linux patching and VMware snapshot complete"
+        body: |
+          The following servers were successfully patched and had a successful VMware snapshot:
+          {% for server in success_servers %}
+          - {{ server }} (uptime: {{ uptime_result.stdout }}, total updates: {{ patch_result.stdout | count }})
+          {% endfor %}
+
+          The following servers failed the VMware snapshot:
+          {% for server in failed_servers %}
+          - {{ server }}
+          {% endfor %}
