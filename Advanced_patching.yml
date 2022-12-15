@@ -44,7 +44,7 @@
       when: update_cache_result.changed
 
     - name: Check if patches were applied successfully
-      command: dpkg -l | grep ^ii
+      command: rpm -l | grep ^ii
       register: patch_result
 
     - name: Get system uptime
