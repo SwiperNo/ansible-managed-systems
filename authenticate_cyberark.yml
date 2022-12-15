@@ -1,0 +1,25 @@
+- hosts: localhost
+  tasks:
+    - name: Authenticate to CyberArk
+      cyberark_authentication:
+        client_id: "{{ client_id }}"
+        client_secret: "{{ client_secret }}"
+        cyberark_api_base_url: "https://{{ cyberark_api_base_url }}/PasswordVault/API"
+        password: "{{ password }}"
+        username: "{{ username }}"
+        validate_certs: no
+      register: cyberark_auth
+
+    - name: Get account password from CyberArk
+      cyberark_password:
+        account: "{{ account_name }}"
+        cyberark_api_base_url: "https://{{ cyberark_api_base_url }}/PasswordVault/API"
+        state: present
+        token: "{{ cyberark_auth.access_token }}"
+        validate_certs: no
+      register: account_password
+
+    - name: Save account password to file
+      copy:
+        content: "{{ account_password.password }}"
+        dest: "{{ password_file_path }}"
