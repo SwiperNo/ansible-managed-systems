@@ -20,6 +20,19 @@
         state: present
       register: snapshot_result
       delegate_to: localhost
+      
+    - name: Set snapshot retention policy
+      vmware_snapshot_info:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        datacenter: "{{ datacenter_name }}"
+        vm_id: "{{ snapshot_result.instance.value }}"
+        snapshot_name: "Weekly snapshot"
+        retention_policy: "7D"
+      delegate_to: localhost
+      when: snapshot_result.changed
 
     - name: Add server to failed snapshot list if snapshot failed
       set_fact:
