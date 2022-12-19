@@ -5,6 +5,8 @@
   vars:
     failed_servers: []
     success_servers: []
+    failed_update_servers: []
+    
   tasks:
     - name: Take a VMware snapshot
       vmware_guest_snapshot:
@@ -12,32 +14,48 @@
         username: "{{ vcenter_username }}"
         password: "{{ vcenter_password }}"
         datacenter: "{{ datacenter_name }}"
+        validate_certs: no
         name: "{{ vm_name }}"
         snapshot_name: "{{ snapshot_name }}"
         state: present
       register: snapshot_result
+      delegate_to: localhost
 
     - name: Add server to failed snapshot list if snapshot failed
       set_fact:
         failed_servers: "{{ failed_servers + [vm_name] }}"
       when: snapshot_result.failed
 
-    - name: Update package manager cache
+    - name: Update all packages
       package:
+        name: "*"
+        state: latest
         update_cache: yes
-      register: update_cache_result
-      when: vm_name not in failed_servers
-
-    - name: Install available package updates
-      package:
-        upgrade: yes
+      become: true
       register: upgrade_result
       when: vm_name not in failed_servers
+      
+      name: Revert server from snapshot if update fails
+      vmware_guest_snapshot:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        datacenter: "{{ datacenter_name }}"
+        name: "{{ inventory_hostname }}"
+        state: revert
+      delegate_to: localhost
+      when: update_result.failed
 
     - name: Add server to success list if snapshot and patches were successful
       set_fact:
         success_servers: "{{ success_servers + [vm_name] }}"
       when: snapshot_result.changed and upgrade_result.changed
+    
+    - name: Add server to update failed list if the patches were not successful
+      set_fact:
+        failed_update_servers: "{{ failed_update_servers + [vm_name] }}"
+      when: update_result.failed
 
     - name: Reboot the system if required
       reboot:
@@ -65,9 +83,12 @@
           {% for server in success_servers %}
           - {{ server }} (uptime: {{ uptime_result.stdout }}, total updates: {{ patch_result.stdout | count }})
           {% endfor %}
+          
+          The following servers were reverted back due to failed patching, please verify:
+          {% for server in failed_update_servers %}
+          - {{ server }} (uptime: {{ uptime_result.stdout }})
 
-          The following servers failed the VMware snapshot:
+          The following servers failed the VMware snapshot, please verify:
           {% for server in failed_servers %}
           - {{ server }}
           {% endfor %}
-      when: success_servers|length > 0 or failed_servers|length > 0
