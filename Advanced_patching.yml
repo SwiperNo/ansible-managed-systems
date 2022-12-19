@@ -15,7 +15,7 @@
         password: "{{ vcenter_password }}"
         datacenter: "{{ datacenter_name }}"
         validate_certs: no
-        name: "{{ vm_name }}"
+        name: "{{ inventory_hostname }}"
         snapshot_name: "{{ snapshot_name }}"
         state: present
       register: snapshot_result
@@ -23,7 +23,7 @@
 
     - name: Add server to failed snapshot list if snapshot failed
       set_fact:
-        failed_servers: "{{ failed_servers + [vm_name] }}"
+        failed_servers: "{{ failed_servers + [inventory_hostname] }}"
       when: snapshot_result.failed
 
     - name: Update all packages
@@ -49,12 +49,12 @@
 
     - name: Add server to success list if snapshot and patches were successful
       set_fact:
-        success_servers: "{{ success_servers + [vm_name] }}"
+        success_servers: "{{ success_servers + [inventory_hostname] }}"
       when: snapshot_result.changed and upgrade_result.changed
     
     - name: Add server to update failed list if the patches were not successful
       set_fact:
-        failed_update_servers: "{{ failed_update_servers + [vm_name] }}"
+        failed_update_servers: "{{ failed_update_servers + [inventory_hostname] }}"
       when: update_result.failed
 
     - name: Reboot the system if required
@@ -62,7 +62,7 @@
       when: update_cache_result.changed
 
     - name: Check if patches were applied successfully
-      command: rpm -l | grep ^ii
+      command: rpm -qa | grep ^ii
       register: patch_result
 
     - name: Get system uptime
