@@ -1,6 +1,6 @@
 ---
 - name: Test Snapshot
-  hosts: node1
+  hosts: all
   
   vars_files:
     - vault/creds.yml
@@ -18,7 +18,7 @@
         username: "{{ vcenter_username }}"
         password: "{{ vcenter_password }}"
         validate_certs: no
-        name: Node1
+        name: "{{ inventory_hostname }}"
         datacenter: "{{ datacenter_name }}"
       register: vm_folder
       delegate_to: localhost
@@ -31,7 +31,7 @@
         datacenter: "{{ datacenter_name }}"
         folder: "{{vm_folder.folders[0]}}"
         validate_certs: no
-        name: Node1
+        name: "{{ inventory_hostname }}"
         snapshot_name: "Ansible-Patching"
         description: "Ansible-Patching"
         state: present
@@ -67,7 +67,7 @@
         datacenter: "{{ datacenter_name }}"
         folder: "{{vm_folder.folders[0]}}"
         validate_certs: no
-        name: Node1
+        name: "{{ inventory_hostname }}"
         snapshot_name: "Ansible-Patching"
         description: "Ansible-Patching"
         state: revert
@@ -115,14 +115,14 @@
        body: |
          The following servers were successfully patched and had a successful VMware snapshot:
           {% for server in success_servers %}
-          - {{ server }} (uptime: {{ uptime_result.stdout }}, total updates: {{ patch_result.stdout | count }})
+          - {{ server }} (uptime: {{ uptime_result.stdout }}, total updates: {{ upgrade_result.results | count }})
           {% endfor %}
     
           The following servers were reverted back due to failed patching, please verify:
           {% for server in failed_update_servers %}
           - {{ server }} (uptime: {{ uptime_result.stdout }})
           {% endfor %}
-          
+
           The following servers failed the VMware snapshot, please verify:
           {% for server in failed_servers %}
           - {{ server }}
