@@ -1,0 +1,131 @@
+---
+- name: Test Snapshot
+  hosts: node1
+  
+  vars_files:
+    - vault/creds.yml
+
+  vars:
+    failed_servers: []
+    success_servers: []
+    failed_update_servers: []
+
+  tasks:
+    
+    - name: find guest's folder using name
+      vmware_guest_find:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        name: Node1
+        datacenter: "{{ datacenter_name }}"
+      register: vm_folder
+      delegate_to: localhost
+    
+    - name: Take a snapshot
+      vmware_guest_snapshot:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        datacenter: "{{ datacenter_name }}"
+        folder: "{{vm_folder.folders[0]}}"
+        validate_certs: no
+        name: Node1
+        snapshot_name: "Ansible-Patching"
+        description: "Ansible-Patching"
+        state: present
+      register: snapshot_result
+      delegate_to: localhost
+    
+    - name: Check snapshot result
+      debug:
+        var: snapshot_result
+
+    - name: Add server to failed snapshot list if snapshot failed
+      set_fact:
+        failed_servers: "{{ failed_servers + [inventory_hostname] }}"
+      when: snapshot_result.failed
+
+    - name: Update server if snapshot was success
+      package:
+        name: "*"
+        state: latest
+        update_cache: yes
+      register: upgrade_result
+      when: vm_name not in failed_servers
+
+    - name: Debug upgrade result
+      debug:
+        var: upgrade_result
+    
+    - name: Revert if updated failed
+      vmware_guest_snapshot:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        datacenter: "{{ datacenter_name }}"
+        folder: "{{vm_folder.folders[0]}}"
+        validate_certs: no
+        name: Node1
+        snapshot_name: "Ansible-Patching"
+        description: "Ansible-Patching"
+        state: revert
+      delegate_to: localhost
+      when: upgrade_result.failed
+    
+    - name: Add server to success list if snapshot and patches were successful
+      set_fact:
+        success_servers: "{{ success_servers + [inventory_hostname] }}"
+      when: snapshot_result.changed and upgrade_result.changed
+
+    - name: Check facts
+      debug:
+        var: success_servers
+    
+    - name: Add server to update failed list if the patches were not successful
+      set_fact:
+        failed_update_servers: "{{ failed_update_servers + [inventory_hostname] }}"
+      when: upgrade_result.failed
+
+    - name: Check facts
+      debug:
+        var: failed_update_servers
+
+    - name: Reboot the system if required
+      reboot:
+      when: upgrade_result.changed
+
+    - name: Get System uptime
+      command: uptime
+      register: uptime_result
+ 
+
+  post_tasks:
+ 
+   - name: Send basic email
+     community.general.mail:
+       host: smtp.gmail.com
+       port: 587
+       username: "{{ email_username }}"
+       password: "{{ email_password }}"
+       to:
+         - "{{ email_username }}"
+       subject: Server Update Report
+       body: |
+         The following servers were successfully patched and had a successful VMware snapshot:
+          {% for server in success_servers %}
+          - {{ server }} (uptime: {{ uptime_result.stdout }}, total updates: {{ patch_result.stdout | count }})
+          {% endfor %}
+    
+          The following servers were reverted back due to failed patching, please verify:
+          {% for server in failed_update_servers %}
+          - {{ server }} (uptime: {{ uptime_result.stdout }})
+          {% endfor %}
+          
+          The following servers failed the VMware snapshot, please verify:
+          {% for server in failed_servers %}
+          - {{ server }}
+          {% endfor %}
+     run_once: true
+     delegate_to: localhost
